@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from app.database.database import SessionLocal
 from sqlalchemy import text
+from app.routes.task_routes import router as task_router
 
 app = FastAPI()
 
@@ -14,3 +15,6 @@ def test_db():
         return {"status": "Подключение к базе данных успешно"}
     except Exception as e:
         return {"status": "Ошибка подключения к базе данных", "details": str(e)}
+
+
+app.include_router(task_router)
