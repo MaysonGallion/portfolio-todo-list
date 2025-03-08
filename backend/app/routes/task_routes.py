@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from ..database.database import SessionLocal
 from ..models.task import Task
@@ -34,12 +34,24 @@ def create_task(task: TaskCreate, db: Session = Depends(get_db)):
 
 # Эндпоинт для получения всех задач с фильтром по статусу
 @router.get("/tasks/", response_model=TaskListResponse)
-def get_tasks(db: Session = Depends(get_db), is_completed: Optional[bool] = None):
+def get_tasks(db: Session = Depends(get_db),
+              is_completed: Optional[bool] = Query(None,
+                                                   description="Фильтр: true - выполненные, false - невыполненные"),
+              # Поиск задачи по статусу
+              q: Optional[str] = Query(None, min_length=2,
+                                       description="Поиск по названию задачи (не менее 2 символов)")):  # Поиск задачи по словув название
+
     logger.info("Получен запрос на получение всех задач")
 
     query = db.query(Task)
-    if is_completed is not None:
+
+    if is_completed is not None:  # фильтр по статусу
+        logger.info(f"Получен запрос на поиска задач со статусом {is_completed}")
         query = query.filter(Task.is_completed == is_completed)
+
+    if q:  # # Фильтр по поисковому запросу (если передан)
+        logger.info(f"Получен запрос на поиска задач по буквам в title: {q}")
+        query = query.filter(Task.title.ilike(f"%{q}%"))  # # SQL `ILIKE` для поиска без учёта регистра
 
     tasks = query.order_by(Task.created_at.desc()).all()
 
