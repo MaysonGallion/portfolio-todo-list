@@ -34,14 +34,20 @@ def create_task(task: TaskCreate, db: Session = Depends(get_db)):
 
 # Эндпоинт для получения всех задач с фильтром по статусу
 @router.get("/tasks/", response_model=TaskListResponse)
-def get_tasks(db: Session = Depends(get_db),
-              is_completed: Optional[bool] = Query(None,
-                                                   description="Фильтр: true - выполненные, false - невыполненные"),
-              # Поиск задачи по статусу
-              q: Optional[str] = Query(None, min_length=2,
-                                       description="Поиск по названию задачи (не менее 2 символов)")):  # Поиск задачи по словув название
+def get_tasks(
+        db: Session = Depends(get_db),
 
-    logger.info("Получен запрос на получение всех задач")
+        is_completed: Optional[bool] = Query(None,  # Поиск задачи по статусу
+                                             description="Фильтр: true - выполненные, false - невыполненные"),
+
+        q: Optional[str] = Query(None, min_length=2,  # Поиск задачи по словам название
+                                 description="Поиск по названию задачи (не менее 2 символов)"),
+
+        page: int = Query(1, ge=1, description="Номер страницы (начиная с 1)"),
+        size: int = Query(5, qe=1, le=100, description="Количество задач на странице (по умолчанию 5, макс. 100)")
+
+):
+    logger.info("Получен запрос на получение всех задач (страница {page}, размер {size})")
 
     query = db.query(Task)
 
@@ -53,11 +59,15 @@ def get_tasks(db: Session = Depends(get_db),
         logger.info(f"Получен запрос на поиска задач по буквам в title: {q}")
         query = query.filter(Task.title.ilike(f"%{q}%"))  # # SQL `ILIKE` для поиска без учёта регистра
 
-    tasks = query.order_by(Task.created_at.desc()).all()
+    total_tasks = query.count()
 
-    logger.info(f"Найдено задач: {len(tasks)}")
+    tasks = query.order_by(Task.created_at.desc()).offset((page -1) * size).limit(size).all()
+
+    logger.info(f"Найдено задач: {len(tasks)} из {total_tasks} (стр. {page})")
     return {
-        "count": len(tasks),
+        "total": total_tasks,
+        "page": page,
+        "size": size,
         "tasks": [
             {
                 "id": t.id,

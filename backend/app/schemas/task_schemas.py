@@ -29,5 +29,7 @@ class TaskResponse(BaseModel):
 
 
 class TaskListResponse(BaseModel):
-    count: int
+    total: int
+    page: int
+    size: int
     tasks: List[TaskResponse]
