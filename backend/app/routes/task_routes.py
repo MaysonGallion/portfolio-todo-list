@@ -32,36 +32,30 @@ def create_task(task: TaskCreate, db: Session = Depends(get_db)):
     return {"message": "Задача успешно создана!", "task_id": new_task.id}
 
 
-# Эндпоинт для получения всех задач с фильтром по статусу
+# Эндпоинт для получения всех задач с фильтрами и пагинацией
 @router.get("/tasks/", response_model=TaskListResponse)
 def get_tasks(
         db: Session = Depends(get_db),
-
-        is_completed: Optional[bool] = Query(None,  # Поиск задачи по статусу
-                                             description="Фильтр: true - выполненные, false - невыполненные"),
-
-        q: Optional[str] = Query(None, min_length=2,  # Поиск задачи по словам название
-                                 description="Поиск по названию задачи (не менее 2 символов)"),
-
+        is_completed: Optional[bool] = Query(None, description="Фильтр: true - выполненные, false - невыполненные"),
+        q: Optional[str] = Query(None, min_length=2, description="Поиск по названию задачи (не менее 2 символов)"),
         page: int = Query(1, ge=1, description="Номер страницы (начиная с 1)"),
-        size: int = Query(5, qe=1, le=100, description="Количество задач на странице (по умолчанию 5, макс. 100)")
-
+        size: int = Query(5, ge=1, le=100, description="Количество задач на странице (по умолчанию 5, макс. 100)")
 ):
-    logger.info("Получен запрос на получение всех задач (страница {page}, размер {size})")
+    logger.info(f"Получен запрос на получение всех задач (страница {page}, размер {size})")
 
     query = db.query(Task)
 
-    if is_completed is not None:  # фильтр по статусу
-        logger.info(f"Получен запрос на поиска задач со статусом {is_completed}")
+    if is_completed is not None:
+        logger.info(f"Фильтр по статусу: {is_completed}")
         query = query.filter(Task.is_completed == is_completed)
 
-    if q:  # # Фильтр по поисковому запросу (если передан)
-        logger.info(f"Получен запрос на поиска задач по буквам в title: {q}")
-        query = query.filter(Task.title.ilike(f"%{q}%"))  # # SQL `ILIKE` для поиска без учёта регистра
+    if q:
+        logger.info(f"Фильтр по названию: {q}")
+        query = query.filter(Task.title.ilike(f"%{q}%"))
 
-    total_tasks = query.count()
+    total_tasks = query.with_entities(Task.id).count()  # Оптимизировано для скорости
 
-    tasks = query.order_by(Task.created_at.desc()).offset((page -1) * size).limit(size).all()
+    tasks = query.order_by(Task.created_at.desc()).offset((page - 1) * size).limit(size).all()
 
     logger.info(f"Найдено задач: {len(tasks)} из {total_tasks} (стр. {page})")
     return {
