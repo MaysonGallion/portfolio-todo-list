@@ -2,10 +2,10 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from ..database.database import SessionLocal
 from ..models.task import Task
-from ..schemas.task_schemas import TaskCreate, TaskUpdate, TaskBase
+from ..schemas.task_schemas import TaskCreate, TaskUpdate, TaskListResponse
 import logging
+from typing import Optional
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
@@ -32,22 +32,31 @@ def create_task(task: TaskCreate, db: Session = Depends(get_db)):
     return {"message": "Задача успешно создана!", "task_id": new_task.id}
 
 
-# Эндпоинт для получения всех задач
-@router.get("/tasks/", response_model=list[dict])
-def get_tasks(db: Session = Depends(get_db)):
+# Эндпоинт для получения всех задач с фильтром по статусу
+@router.get("/tasks/", response_model=TaskListResponse)
+def get_tasks(db: Session = Depends(get_db), is_completed: Optional[bool] = None):
     logger.info("Получен запрос на получение всех задач")
-    tasks = db.query(Task).order_by(Task.created_at.desc()).all()
+
+    query = db.query(Task)
+    if is_completed is not None:
+        query = query.filter(Task.is_completed == is_completed)
+
+    tasks = query.order_by(Task.created_at.desc()).all()
+
     logger.info(f"Найдено задач: {len(tasks)}")
-    return [
-        {
-            "id": t.id,
-            "title": t.title,
-            "description": t.description,
-            "is_completed": t.is_completed,
-            "created_at": t.created_at,
-        }
-        for t in tasks
-    ]
+    return {
+        "count": len(tasks),
+        "tasks": [
+            {
+                "id": t.id,
+                "title": t.title,
+                "description": t.description,
+                "is_completed": t.is_completed,
+                "created_at": t.created_at
+            }
+            for t in tasks
+        ]
+    }
 
 
 # Эндпоинт для получения одной задачи по ID
@@ -56,7 +65,7 @@ def get_task(task_id: int, db: Session = Depends(get_db)):
     logger.info(f"Получен запрос на получение задачи с id={task_id}")
     task = db.query(Task).filter(Task.id == task_id).first()
     if task is None:
-        logger.warning(f"задача с id={task_id} не найдена")
+        logger.warning(f"Задача с id={task_id} не найдена")
         raise HTTPException(status_code=404, detail="Задача не найдена")
     logger.info(f"Задача найдена: id={task.id}, title={task.title}")
     return {
@@ -70,8 +79,7 @@ def get_task(task_id: int, db: Session = Depends(get_db)):
 
 # Эндпоинт для обновления задачи по ID
 @router.put("/tasks/{task_id}/", response_model=dict)
-def update_task(task_id: int, task_update: TaskUpdate, db: Session = Depends(get_db)):  # Тут TaskUpdate!
-
+def update_task(task_id: int, task_update: TaskUpdate, db: Session = Depends(get_db)):
     logger.info(f"Получен запрос на обновление задачи с id={task_id}")
 
     task = db.query(Task).filter(Task.id == task_id).first()
@@ -109,7 +117,7 @@ def update_task(task_id: int, task_update: TaskUpdate, db: Session = Depends(get
     }
 
 
-# Эндпоинт для удаления задачи (пока пустой — заполним позже)
+# Эндпоинт для удаления задачи
 @router.delete("/tasks/{task_id}/", response_model=dict)
 def delete_task(task_id: int, db: Session = Depends(get_db)):
     logger.info(f"Получен запрос на удаление задачи с id={task_id}")

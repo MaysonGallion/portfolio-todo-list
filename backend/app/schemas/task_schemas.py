@@ -1,5 +1,6 @@
 from pydantic import BaseModel, Field
-from typing import Optional
+from typing import Optional, List
+from datetime import datetime
 
 
 # Базовая схема — общая для всех операций (создание, обновление)
@@ -17,3 +18,16 @@ class TaskCreate(TaskBase):
 # Схема для обновления задачи — все поля опциональны
 class TaskUpdate(TaskBase):
     pass
+
+
+class TaskResponse(BaseModel):
+    id: int
+    title: str
+    description: Optional[str]
+    is_completed: bool
+    created_at: datetime
+
+
+class TaskListResponse(BaseModel):
+    count: int
+    tasks: List[TaskResponse]
