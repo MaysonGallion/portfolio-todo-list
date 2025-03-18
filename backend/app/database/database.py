@@ -1,9 +1,12 @@
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, declarative_base
-from dotenv import load_dotenv
+from dotenv import load_dotenv, find_dotenv
 import os
 
-load_dotenv()
+if not find_dotenv():
+    print("⚠️ Файл .env не найден! Проверь настройки.")
+else:
+    load_dotenv()
 
 DB_HOST = os.getenv("DB_HOST")
 DB_PORT = os.getenv("DB_PORT")
