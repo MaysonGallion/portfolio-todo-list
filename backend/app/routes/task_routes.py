@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, Body
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 from ..database.database import SessionLocal
 from ..models.task import Task
 from ..schemas.task_schemas import TaskCreate, TaskUpdate, TaskListResponse, TaskBulkDelete
@@ -41,23 +41,24 @@ def get_tasks(
         page: int = Query(1, ge=1, description="Номер страницы (начиная с 1)"),
         size: int = Query(5, ge=1, le=100, description="Количество задач на странице (по умолчанию 5, макс. 100)")
 ):
-    logger.info(f"Получен запрос на получение всех задач (страница {page}, размер {size})")
+    logger.info(f"📌 Запрос задач: стр. {page}, размер {size}, фильтр по статусу={is_completed}, поиск={q}")
 
     query = db.query(Task)
 
     if is_completed is not None:
-        logger.info(f"Фильтр по статусу: {is_completed}")
         query = query.filter(Task.is_completed == is_completed)
 
     if q:
-        logger.info(f"Фильтр по названию: {q}")
         query = query.filter(Task.title.ilike(f"%{q}%"))
 
-    total_tasks = query.with_entities(Task.id).count()  # Оптимизировано для скорости
+    # Оптимизированный способ получения общего количества задач (одним запросом)
+    total_tasks = query.count()
 
+    # Пагинация
     tasks = query.order_by(Task.created_at.desc()).offset((page - 1) * size).limit(size).all()
 
-    logger.info(f"Найдено задач: {len(tasks)} из {total_tasks} (стр. {page})")
+    logger.info(f"✅ Загружено {len(tasks)} задач из {total_tasks} (стр. {page})")
+
     return {
         "total": total_tasks,
         "page": page,
