@@ -1,8 +1,8 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Body
 from sqlalchemy.orm import Session
 from ..database.database import SessionLocal
 from ..models.task import Task
-from ..schemas.task_schemas import TaskCreate, TaskUpdate, TaskListResponse
+from ..schemas.task_schemas import TaskCreate, TaskUpdate, TaskListResponse, TaskBulkDelete
 import logging
 from typing import Optional
 
@@ -137,12 +137,67 @@ def update_task(task_id: int, task_update: TaskUpdate, db: Session = Depends(get
 @router.delete("/tasks/{task_id}/", response_model=dict)
 def delete_task(task_id: int, db: Session = Depends(get_db)):
     logger.info(f"Получен запрос на удаление задачи с id={task_id}")
-    task = db.query(Task).filter(Task.id == task_id).first()
+
+    task = db.query(Task).filter_by(id=task_id).first()
+
     if task is None:
         logger.warning(f"Задача с id={task_id} не найдена")
         raise HTTPException(status_code=404, detail="Задача не найдена")
-    db.delete(task)
-    db.commit()
-    logger.info(f"Задача с id={task_id} успешно удалена")
 
-    return {"message": "Задача успешно удалена"}
+    try:
+        db.delete(task)
+        db.commit()
+        logger.info(f"Задача с id={task_id} успешно удалена")
+        return {"message": "Задача успешно удалена", "deleted_task_id": task_id}
+
+    except Exception as e:
+        logger.error(f"Ошибка при удалении задачи {task_id}: {str(e)}")
+        raise HTTPException(status_code=500, detail="Ошибка удаления задачи")
+
+
+
+@router.delete("/tasks/bulk-delete", response_model=dict)
+def bulk_delete_tasks(task_data: TaskBulkDelete = Body(...), db: Session = Depends(get_db)):
+    """
+    Удаление нескольких задач по списку ID.
+    Принимает JSON:
+    {
+        "task_ids": [5, 6, 7]
+    }
+    """
+    logger.info(f"✅ Получен запрос на массовое удаление задач: {task_data.task_ids}")
+
+    # Логируем полученные данные
+    print(f"📌 JSON, который пришел: {task_data}")
+    print(f"📌 Тип данных task_data: {type(task_data)}")
+    print(f"📌 task_data.task_ids: {task_data.task_ids}")
+
+    # Проверяем, какие ID реально существуют в БД
+    existing_task_ids = {task_id for task_id, in db.query(Task.id).filter(Task.id.in_(task_data.task_ids)).all()}
+    print(f"📌 Найденные ID в БД: {existing_task_ids}")
+
+    # Определяем ID задач, которые будут удалены
+    deleted_ids = list(existing_task_ids)
+    not_found_ids = list(set(task_data.task_ids) - existing_task_ids)
+
+    print(f"📌 Удаляемые задачи: {deleted_ids}")
+    print(f"📌 Не найденные задачи: {not_found_ids}")
+
+    if deleted_ids:
+        try:
+            print(f"🚀 Перед удалением задач из БД...")
+            db.query(Task).filter(Task.id.in_(deleted_ids)).delete(synchronize_session=False)
+            db.commit()
+            print(f"✅ Успешно удалены: {deleted_ids}")
+
+            logger.info(f"✅ Удалены задачи: {deleted_ids}")
+        except Exception as e:
+            db.rollback()
+            logger.error(f"❌ Ошибка при массовом удалении: {str(e)}")
+            print(f"❌ Ошибка при удалении: {str(e)}")
+            raise HTTPException(status_code=500, detail="Ошибка удаления задач")
+
+    if not_found_ids:
+        logger.warning(f"⚠️ Не найдены задачи с ID: {not_found_ids}")
+
+    return {"deleted": deleted_ids, "not_found": not_found_ids}

@@ -33,3 +33,7 @@ class TaskListResponse(BaseModel):
     page: int
     size: int
     tasks: List[TaskResponse]
+
+
+class TaskBulkDelete(BaseModel):
+    task_ids: List[int] = Field(..., min_items=1, description="Список ID задач для удаления")
